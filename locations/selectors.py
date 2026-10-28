@@ -5,11 +5,22 @@ computed by the database on every query via annotations.
 
 from datetime import timedelta
 
-from django.db.models import Avg, Count, F, FloatField, IntegerField, OuterRef, QuerySet, Subquery, Value
+from django.db.models import (
+    Avg,
+    Count,
+    F,
+    FloatField,
+    IntegerField,
+    OuterRef,
+    Q,
+    QuerySet,
+    Subquery,
+    Value,
+)
 from django.db.models.functions import Cast, Coalesce, Ln
 from django.utils import timezone
 
-from .models import Location, LocationView, Review
+from .models import Location, LocationView, Review, ReviewVote
 
 POPULARITY_VIEWS_WINDOW = timedelta(days=7)
 # popularity = avg_rating * ln(1 + reviews_count) + VIEWS_WEIGHT * ln(1 + views_7d)
@@ -60,3 +71,23 @@ def annotate_location_stats(qs: QuerySet[Location]) -> QuerySet[Location]:
 
 def location_list_queryset() -> QuerySet[Location]:
     return annotate_location_stats(Location.objects.select_related("category", "author"))
+
+
+def review_queryset(user) -> QuerySet[Review]:
+    """
+    Reviews of non-deleted locations with like/dislike counters and the
+    current user's own vote. Only one to-many relation (votes) is joined,
+    so Count(filter=...) is safe here.
+    """
+    qs = (
+        Review.objects.filter(location__is_deleted=False)
+        .select_related("author")
+        .annotate(
+            likes=Count("votes", filter=Q(votes__value=ReviewVote.Value.LIKE)),
+            dislikes=Count("votes", filter=Q(votes__value=ReviewVote.Value.DISLIKE)),
+        )
+    )
+    if user.is_authenticated:
+        my_vote = ReviewVote.objects.filter(review=OuterRef("pk"), user=user).values("value")[:1]
+        return qs.annotate(my_vote=Subquery(my_vote, output_field=IntegerField()))
+    return qs.annotate(my_vote=Value(None, output_field=IntegerField()))

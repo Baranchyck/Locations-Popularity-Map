@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from .cache import bump_list_version
 from .models import Category, Location, LocationSubscription, LocationView, Review, ReviewVote
 
 
@@ -25,6 +26,8 @@ class LocationAdmin(admin.ModelAdmin):
     @admin.action(description="Restore selected locations")
     def restore_selected(self, request, queryset):
         queryset.update(is_deleted=False, deleted_at=None)
+        # QuerySet.update() doesn't send post_save -> invalidate explicitly.
+        bump_list_version()
 
 
 @admin.register(Review)

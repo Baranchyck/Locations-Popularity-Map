@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Category, Location
+from .models import Category, Location, Review, ReviewVote
 
 User = get_user_model()
 
@@ -67,3 +67,34 @@ class LocationSerializer(serializers.ModelSerializer):
 
     def get_popularity(self, obj) -> float:
         return round(obj.popularity, 3)
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    author = UserShortSerializer(read_only=True)
+    likes = serializers.IntegerField(read_only=True)
+    dislikes = serializers.IntegerField(read_only=True)
+    my_vote = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Review
+        fields = (
+            "id",
+            "location",
+            "author",
+            "rating",
+            "text",
+            "likes",
+            "dislikes",
+            "my_vote",
+            "created_at",
+            "updated_at",
+        )
+        # location comes from the URL and can't be changed later.
+        read_only_fields = ("location", "created_at", "updated_at")
+
+
+class VoteSerializer(serializers.Serializer):
+    value = serializers.ChoiceField(
+        choices=ReviewVote.Value.choices,
+        help_text="1 = like, -1 = dislike",
+    )
