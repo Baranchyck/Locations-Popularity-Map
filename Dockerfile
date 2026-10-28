@@ -12,5 +12,10 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+# Run as an unprivileged user (Celery refuses to be happy as root, and it's
+# good practice anyway).
+RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+USER app
+
 EXPOSE 8000
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

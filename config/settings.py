@@ -146,10 +146,13 @@ EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "1025"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@map-api.local")
 
-# There is no frontend: the link points to where a client app would live.
-# uid/token are also included in the email body for calling the API directly.
+# No frontend: by default the link points straight to the API confirm endpoint
+# (GET validates the link, POST sets the new password). With a client app,
+# override PASSWORD_RESET_URL to point at its page instead.
 PASSWORD_RESET_URL = os.getenv(
-    "PASSWORD_RESET_URL", "http://localhost:3000/reset-password?uid={uid}&token={token}"
+    "PASSWORD_RESET_URL",
+    f"http://localhost:{os.getenv('WEB_PORT', '8000')}"
+    "/api/auth/password-reset/confirm/?uid={uid}&token={token}",
 )
 PASSWORD_RESET_TIMEOUT = 60 * 60  # seconds
 

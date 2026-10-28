@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from .serializers import (
     LoginSerializer,
     PasswordResetConfirmSerializer,
+    PasswordResetLinkSerializer,
     PasswordResetRequestSerializer,
     RegisterSerializer,
     UserSerializer,
@@ -101,8 +102,24 @@ class PasswordResetRequestView(AuthThrottleMixin, APIView):
 
 
 class PasswordResetConfirmView(AuthThrottleMixin, APIView):
+    """
+    GET  ?uid=...&token=...  -> checks the link from the email (no side effects).
+    POST {uid, token, new_password} -> sets the new password.
+    """
+
     permission_classes = [AllowAny]
     serializer_class = PasswordResetConfirmSerializer
+
+    def get(self, request):
+        serializer = PasswordResetLinkSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        return Response(
+            {
+                "detail": "Link is valid. POST uid, token and new_password to this URL.",
+                "uid": serializer.validated_data["uid"],
+                "token": serializer.validated_data["token"],
+            }
+        )
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)

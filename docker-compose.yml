@@ -44,7 +44,7 @@ services:
 
   celery:
     <<: *app
-    command: celery -A config worker -l info
+    command: celery -A config worker -l info --concurrency=2
 
 volumes:
   pg_data:

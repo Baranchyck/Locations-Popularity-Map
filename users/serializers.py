@@ -66,10 +66,11 @@ class PasswordResetRequestSerializer(serializers.Serializer):
         return value.strip().lower()
 
 
-class PasswordResetConfirmSerializer(serializers.Serializer):
+class PasswordResetLinkSerializer(serializers.Serializer):
+    """Validates a uid/token pair from a reset link."""
+
     uid = serializers.CharField()
     token = serializers.CharField()
-    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     default_error = "Invalid or expired reset link."
 
@@ -83,6 +84,16 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         if not default_token_generator.check_token(user, attrs["token"]):
             raise serializers.ValidationError(self.default_error)
 
+        attrs["user"] = user
+        return attrs
+
+
+class PasswordResetConfirmSerializer(PasswordResetLinkSerializer):
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        user = attrs["user"]
         validate_password(attrs["new_password"], user=user)
         attrs["user"] = user
         return attrs
