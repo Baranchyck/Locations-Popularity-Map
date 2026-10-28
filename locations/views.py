@@ -15,11 +15,13 @@ from common.filters import NullsLastOrderingFilter
 from common.permissions import IsAdminOrReadOnly, IsAuthorOrAdminOrReadOnly
 
 from .cache import LIST_CACHE_TTL, list_cache_key
+from .export import EXPORT_FORMATS, export_response
 from .filters import LocationFilter
-from .models import Category, Review, ReviewVote
+from .models import Category, LocationSubscription, Review, ReviewVote
 from .selectors import location_list_queryset, review_queryset
 from .serializers import CategorySerializer, LocationSerializer, ReviewSerializer, VoteSerializer
 from .services import register_view
+from .tasks import notify_new_review
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +120,9 @@ class LocationViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 review = serializer.save(location=location, author=request.user)
+                # Queue emails only after COMMIT: otherwise the worker may run
+                # before the row is visible, or for a review that was rolled back.
+                transaction.on_commit(lambda: notify_new_review.delay(review.pk))
         except IntegrityError:
             # Two parallel POSTs passed the exists() check; the DB constraint
             # review_one_per_user_location rejected the second one.
@@ -125,6 +130,42 @@ class LocationViewSet(viewsets.ModelViewSet):
 
         review = review_queryset(request.user).get(pk=review.pk)
         return Response(self.get_serializer(review).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"])
+    def export(self, request):
+        """
+        GET /locations/export/?file_format=csv|json  (+ any list filters/search/ordering).
+        The param isn't called `format`: DRF reserves `?format=` for renderer selection.
+        """
+        file_format = request.query_params.get("file_format", "csv").lower()
+        if file_format not in EXPORT_FORMATS:
+            raise ValidationError({"file_format": f"Must be one of: {', '.join(EXPORT_FORMATS)}."})
+        return export_response(self.filter_queryset(self.get_queryset()), file_format)
+
+    @action(
+        detail=True,
+        methods=["post", "delete"],
+        permission_classes=[IsAuthenticated],
+        filter_backends=[],
+    )
+    def subscribe(self, request, pk=None):
+        """Bonus. POST: get emails about new reviews of this location. DELETE: unsubscribe."""
+        location = self.get_object()
+
+        if request.method == "DELETE":
+            deleted, _ = LocationSubscription.objects.filter(
+                location=location, user=request.user
+            ).delete()
+            if not deleted:
+                raise NotFound("You are not subscribed to this location.")
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # get_or_create is race-safe thanks to the unique constraint.
+        _, created = LocationSubscription.objects.get_or_create(location=location, user=request.user)
+        return Response(
+            {"subscribed": True},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
