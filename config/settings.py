@@ -126,6 +126,9 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": os.getenv("AUTH_THROTTLE_RATE", "10/min"),
+    },
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
 }
 
@@ -142,6 +145,13 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "1025"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@map-api.local")
+
+# There is no frontend: the link points to where a client app would live.
+# uid/token are also included in the email body for calling the API directly.
+PASSWORD_RESET_URL = os.getenv(
+    "PASSWORD_RESET_URL", "http://localhost:3000/reset-password?uid={uid}&token={token}"
+)
+PASSWORD_RESET_TIMEOUT = 60 * 60  # seconds
 
 # --- Celery ------------------------------------------------------------------
 CELERY_BROKER_URL = f"{REDIS_URL}/0"
