@@ -44,7 +44,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
         try:
             instance.delete()
         except ProtectedError:
-            # on_delete=PROTECT on Location.category -> 409 instead of a 500.
             raise Conflict("Category is used by locations and can't be deleted.")
 
 
@@ -58,29 +57,21 @@ class LocationViewSet(viewsets.ModelViewSet):
     ordering = ("-created_at",)
 
     def get_queryset(self):
-        # Default manager -> soft-deleted locations are excluded (404 on detail).
         return location_list_queryset()
 
     def perform_create(self, serializer):
         instance = serializer.save(author=self.request.user)
-        # A freshly saved instance has no annotations (rating, popularity...):
-        # re-read it through the annotated queryset before serializing.
         serializer.instance = self.get_queryset().get(pk=instance.pk)
 
     def perform_update(self, serializer):
         instance = serializer.save()
         serializer.instance = self.get_queryset().get(pk=instance.pk)
 
-    # perform_destroy is inherited: instance.delete() is a soft delete.
-
     def list(self, request, *args, **kwargs):
-        # The list doesn't depend on the current user, so one cache entry per
-        # (host, path, query) is correct. If per-user fields are ever added,
-        # the user must become part of the key.
         try:
             key = list_cache_key(request)
             cached = cache.get(key)
-        except Exception:  # Redis down -> serve from DB
+        except Exception:
             logger.exception("Location list cache unavailable")
             key, cached = None, None
 
@@ -103,13 +94,14 @@ class LocationViewSet(viewsets.ModelViewSet):
         filter_backends=[],
     )
     def reviews(self, request, pk=None):
-        """GET: reviews of the location. POST: leave a review (one per user)."""
         location = self.get_object()
 
         if request.method == "GET":
-            # Explicit order: Meta.ordering is ignored in GROUP BY queries,
-            # and pagination needs a deterministic order.
-            qs = review_queryset(request.user).filter(location=location).order_by("-created_at", "-pk")
+            qs = (
+                review_queryset(request.user)
+                .filter(location=location)
+                .order_by("-created_at", "-pk")
+            )
             page = self.paginate_queryset(qs)
             return self.get_paginated_response(self.get_serializer(page, many=True).data)
 
@@ -120,12 +112,9 @@ class LocationViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 review = serializer.save(location=location, author=request.user)
-                # Queue emails only after COMMIT: otherwise the worker may run
-                # before the row is visible, or for a review that was rolled back.
                 transaction.on_commit(lambda: notify_new_review.delay(review.pk))
+        # Race between exists() and INSERT: the unique constraint rejects the second one.
         except IntegrityError:
-            # Two parallel POSTs passed the exists() check; the DB constraint
-            # review_one_per_user_location rejected the second one.
             raise Conflict("You have already reviewed this location.")
 
         review = review_queryset(request.user).get(pk=review.pk)
@@ -133,10 +122,6 @@ class LocationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def export(self, request):
-        """
-        GET /locations/export/?file_format=csv|json  (+ any list filters/search/ordering).
-        The param isn't called `format`: DRF reserves `?format=` for renderer selection.
-        """
         file_format = request.query_params.get("file_format", "csv").lower()
         if file_format not in EXPORT_FORMATS:
             raise ValidationError({"file_format": f"Must be one of: {', '.join(EXPORT_FORMATS)}."})
@@ -149,7 +134,6 @@ class LocationViewSet(viewsets.ModelViewSet):
         filter_backends=[],
     )
     def subscribe(self, request, pk=None):
-        """Bonus. POST: get emails about new reviews of this location. DELETE: unsubscribe."""
         location = self.get_object()
 
         if request.method == "DELETE":
@@ -160,8 +144,9 @@ class LocationViewSet(viewsets.ModelViewSet):
                 raise NotFound("You are not subscribed to this location.")
             return Response(status=status.HTTP_204_NO_CONTENT)
 
-        # get_or_create is race-safe thanks to the unique constraint.
-        _, created = LocationSubscription.objects.get_or_create(location=location, user=request.user)
+        _, created = LocationSubscription.objects.get_or_create(
+            location=location, user=request.user
+        )
         return Response(
             {"subscribed": True},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -170,7 +155,6 @@ class LocationViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         if register_view(request, instance):
-            # Re-read so views_7d and popularity include the view just counted.
             instance = self.get_queryset().get(pk=instance.pk)
         return Response(self.get_serializer(instance).data)
 
@@ -182,10 +166,6 @@ class ReviewViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """
-    Reviews are created via POST /locations/{id}/reviews/.
-    Here: list (filterable), retrieve, edit/delete (author or admin), voting.
-    """
 
     serializer_class = ReviewSerializer
     permission_classes = [IsAuthorOrAdminOrReadOnly]
@@ -208,10 +188,6 @@ class ReviewViewSet(
         serializer_class=VoteSerializer,
     )
     def vote(self, request, pk=None):
-        """
-        POST {"value": 1 | -1}: like / dislike. One vote per user per review;
-        posting again switches the vote. DELETE: withdraw the vote.
-        """
         review = self.get_object()
 
         if request.method == "DELETE":
@@ -224,8 +200,6 @@ class ReviewViewSet(
             raise ValidationError("You can't vote for your own review.")
         serializer = VoteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # update_or_create locks the row (SELECT ... FOR UPDATE) and, on a race
-        # for the first vote, falls back to get() after the unique violation.
         _, created = ReviewVote.objects.update_or_create(
             review=review,
             user=request.user,

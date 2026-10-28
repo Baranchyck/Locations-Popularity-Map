@@ -12,7 +12,6 @@ class TimeStampedModel(models.Model):
 
 class SoftDeleteQuerySet(models.QuerySet):
     def delete(self):
-        """Bulk soft delete: a single UPDATE instead of DELETE."""
         return self.update(is_deleted=True, deleted_at=timezone.now())
 
     def hard_delete(self):
@@ -26,8 +25,6 @@ class SoftDeleteQuerySet(models.QuerySet):
 
 
 class SoftDeleteManager(models.Manager.from_queryset(SoftDeleteQuerySet)):
-    """Default manager: hides soft-deleted rows everywhere (API, reverse relations)."""
-
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
 
@@ -36,7 +33,6 @@ class SoftDeleteModel(models.Model):
     is_deleted = models.BooleanField(default=False, db_index=True, editable=False)
     deleted_at = models.DateTimeField(null=True, blank=True, editable=False)
 
-    # The first declared manager becomes the default one.
     objects = SoftDeleteManager()
     all_objects = SoftDeleteQuerySet.as_manager()
 
@@ -44,8 +40,6 @@ class SoftDeleteModel(models.Model):
         abstract = True
 
     def delete(self, using=None, keep_parents=False):
-        # Goes through save(), so post_save fires (used for cache invalidation);
-        # post_delete does NOT fire for a soft delete.
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save(update_fields=["is_deleted", "deleted_at", "updated_at"])

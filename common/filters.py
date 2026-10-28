@@ -3,13 +3,7 @@ from rest_framework.filters import OrderingFilter
 
 
 class NullsLastOrderingFilter(OrderingFilter):
-    """
-    OrderingFilter that
-    * puts NULLs last in both directions (PostgreSQL puts NULLs FIRST on DESC,
-      so `?ordering=-rating` would otherwise start with unrated locations);
-    * appends `-pk` as a tie-breaker so pagination is deterministic
-      (without a total order, rows with equal keys may jump between pages).
-    """
+    """NULLs last in both directions + pk tie-breaker for stable pagination."""
 
     def filter_queryset(self, request, queryset, view):
         ordering = self.get_ordering(request, queryset, view)

@@ -40,7 +40,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             with transaction.atomic():
                 return User.objects.create_user(**validated_data)
         except IntegrityError:
-            raise serializers.ValidationError({"email": ["A user with this email already exists."]})
+            raise serializers.ValidationError(
+                {"email": ["A user with this email already exists."]}
+            )
 
 
 class LoginSerializer(serializers.Serializer):
@@ -67,8 +69,6 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 
 
 class PasswordResetLinkSerializer(serializers.Serializer):
-    """Validates a uid/token pair from a reset link."""
-
     uid = serializers.CharField()
     token = serializers.CharField()
 

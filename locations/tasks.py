@@ -12,16 +12,11 @@ User = get_user_model()
 
 @shared_task(autoretry_for=(SMTPException, OSError), retry_backoff=True, max_retries=3)
 def send_email(subject: str, message: str, recipient: str) -> None:
-    """One email per task: a retry re-sends only to the recipient that failed."""
     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [recipient])
 
 
 @shared_task
 def notify_new_review(review_id: int) -> None:
-    """
-    Bonus: notify the location author and all subscribers about a new review.
-    Fan-out into per-recipient tasks (no shared To: list, isolated retries).
-    """
     review = (
         Review.objects.select_related("author", "location", "location__author")
         .filter(pk=review_id)
@@ -42,8 +37,8 @@ def notify_new_review(review_id: int) -> None:
 
     subscribers = (
         User.objects.filter(location_subscriptions__location=location, is_active=True)
-        .exclude(pk=review.author_id)  # don't notify about your own review
-        .exclude(pk=location.author_id or 0)  # owner already got the email above
+        .exclude(pk=review.author_id)
+        .exclude(pk=location.author_id or 0)
         .exclude(email="")
         .values_list("email", flat=True)
     )

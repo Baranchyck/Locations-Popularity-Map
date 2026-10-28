@@ -31,10 +31,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # third-party
     "rest_framework",
     "django_filters",
-    # local
     "users",
     "locations",
 ]
@@ -98,13 +96,10 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- Redis / cache -----------------------------------------------------------
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 CACHES = {
     "default": {
-        # Built-in Redis backend (Django >= 4.0): cache.add() maps to SET NX EX,
-        # which we rely on for atomic view de-duplication.
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": f"{REDIS_URL}/1",
         "KEY_PREFIX": "map_api",
@@ -112,7 +107,6 @@ CACHES = {
     }
 }
 
-# --- DRF ---------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
@@ -133,31 +127,24 @@ REST_FRAMEWORK = {
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
 }
 
-# --- Sessions / CSRF ---------------------------------------------------------
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
-# Must be readable by an API client so it can echo it back in X-CSRFToken.
 CSRF_COOKIE_HTTPONLY = False
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 
-# --- Email -------------------------------------------------------------------
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "1025"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@map-api.local")
 
-# No frontend: by default the link points straight to the API confirm endpoint
-# (GET validates the link, POST sets the new password). With a client app,
-# override PASSWORD_RESET_URL to point at its page instead.
 PASSWORD_RESET_URL = os.getenv(
     "PASSWORD_RESET_URL",
     f"http://localhost:{os.getenv('WEB_PORT', '8000')}"
     "/api/auth/password-reset/confirm/?uid={uid}&token={token}",
 )
-PASSWORD_RESET_TIMEOUT = 60 * 60  # seconds
+PASSWORD_RESET_TIMEOUT = 60 * 60
 
-# --- Celery ------------------------------------------------------------------
 CELERY_BROKER_URL = f"{REDIS_URL}/0"
 CELERY_TASK_IGNORE_RESULT = True
 CELERY_TASK_ALWAYS_EAGER = env_bool("CELERY_TASK_ALWAYS_EAGER", False)

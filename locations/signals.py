@@ -8,9 +8,7 @@ from .models import Category, Location, Review
 
 @receiver([post_save, post_delete], sender=Location)
 @receiver([post_save, post_delete], sender=Review)
-@receiver([post_save, post_delete], sender=Category)  # category_name is in the list
+@receiver([post_save, post_delete], sender=Category)
 def invalidate_location_list(sender, **kwargs):
-    # on_commit: if we bumped inside the transaction, a parallel request could
-    # re-cache the *old* data between the bump and the COMMIT.
-    # Soft delete goes through save() -> covered by post_save.
+    # Soft delete is a save(), so post_save covers it too.
     transaction.on_commit(bump_list_version)

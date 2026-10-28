@@ -20,13 +20,11 @@ class LocationAdmin(admin.ModelAdmin):
     actions = ("restore_selected",)
 
     def get_queryset(self, request):
-        # Admin sees soft-deleted rows too (the default manager hides them).
         return Location.all_objects.select_related("category", "author")
 
     @admin.action(description="Restore selected locations")
     def restore_selected(self, request, queryset):
         queryset.update(is_deleted=False, deleted_at=None)
-        # QuerySet.update() doesn't send post_save -> invalidate explicitly.
         bump_list_version()
 
 

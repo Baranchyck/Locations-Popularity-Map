@@ -29,13 +29,13 @@ class Location(SoftDeleteModel, TimeStampedModel):
     description = models.TextField()
     category = models.ForeignKey(
         Category,
-        on_delete=models.PROTECT,  # a category in use can't be removed
+        on_delete=models.PROTECT,
         related_name="locations",
     )
     address = models.CharField(max_length=255)
     latitude = models.DecimalField(
         max_digits=9,
-        decimal_places=6,  # ~0.11 m precision
+        decimal_places=6,
         validators=[MinValueValidator(Decimal("-90")), MaxValueValidator(Decimal("90"))],
     )
     longitude = models.DecimalField(
@@ -45,7 +45,7 @@ class Location(SoftDeleteModel, TimeStampedModel):
     )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,  # keep the location if the author account is removed
+        on_delete=models.SET_NULL,
         null=True,
         related_name="locations",
     )
@@ -115,12 +115,6 @@ class ReviewVote(models.Model):
 
 
 class LocationView(models.Model):
-    """
-    One row per counted view. Needed because popularity uses views for the
-    last 7 days - a single counter column can't answer "how many in a window".
-    De-duplication (1 per viewer per hour) happens in Redis before insert.
-    """
-
     location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name="views")
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -133,14 +127,11 @@ class LocationView(models.Model):
 
     class Meta:
         indexes = [
-            # Serves: WHERE location_id = ? AND created_at >= now() - 7 days
             models.Index(fields=("location", "created_at"), name="locview_loc_created_idx"),
         ]
 
 
 class LocationSubscription(models.Model):
-    """Bonus: user gets an email about every new review on the location."""
-
     location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name="subscriptions")
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="location_subscriptions"

@@ -27,17 +27,13 @@ class AuthThrottleMixin:
 
 
 class CsrfTokenView(APIView):
-    """Sets the `csrftoken` cookie; clients send it back in `X-CSRFToken`."""
-
     permission_classes = [AllowAny]
 
     def get(self, request):
         return Response({"csrfToken": get_token(request)})
 
 
-# DRF marks every APIView as csrf_exempt and only enforces CSRF for
-# *authenticated* session users. Login/register are called by anonymous
-# users, so we enforce CSRF explicitly to prevent login-CSRF.
+# DRF checks CSRF only for authenticated users, so login/register enforce it explicitly.
 @method_decorator(csrf_protect, name="dispatch")
 class RegisterView(AuthThrottleMixin, generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -95,18 +91,12 @@ class PasswordResetRequestView(AuthThrottleMixin, APIView):
         ).first()
         if user is not None:
             send_password_reset_email.delay(user.pk)
-        # Same response whether the email exists or not: no user enumeration.
         return Response(
             {"detail": "If an account with this email exists, a reset link has been sent."}
         )
 
 
 class PasswordResetConfirmView(AuthThrottleMixin, APIView):
-    """
-    GET  ?uid=...&token=...  -> checks the link from the email (no side effects).
-    POST {uid, token, new_password} -> sets the new password.
-    """
-
     permission_classes = [AllowAny]
     serializer_class = PasswordResetConfirmSerializer
 

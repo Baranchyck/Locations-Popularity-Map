@@ -19,8 +19,6 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ("created_at", "updated_at")
 
     def validate_name(self, value: str) -> str:
-        # The DB has a functional UniqueConstraint(Lower("name")); DRF doesn't
-        # derive validators from expression constraints, so check explicitly.
         value = value.strip()
         qs = Category.objects.filter(name__iexact=value)
         if self.instance is not None:
@@ -35,7 +33,6 @@ class LocationSerializer(serializers.ModelSerializer):
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
     category_name = serializers.CharField(source="category.name", read_only=True)
 
-    # Computed by the DB (selectors.annotate_location_stats), never stored.
     rating = serializers.SerializerMethodField()
     reviews_count = serializers.IntegerField(read_only=True)
     views_7d = serializers.IntegerField(read_only=True)
@@ -89,7 +86,6 @@ class ReviewSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        # location comes from the URL and can't be changed later.
         read_only_fields = ("location", "created_at", "updated_at")
 
 

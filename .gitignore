@@ -9,3 +9,4 @@ htmlcov/
 .idea/
 .vscode/
 staticfiles/
+.mypy_cache/
